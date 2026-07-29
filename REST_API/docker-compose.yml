@@ -1,0 +1,11 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    container_name: student-api
+    ports:
+      - "8082:8082"
+    volumes:
+      - ./storage:/app/storage
+    restart: unless-stopped
