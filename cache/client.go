@@ -14,7 +14,7 @@ func main() {
 	defer conn.Close()
 
 	// Send a command to the server
-	fmt.Fprintln(conn, "PING")
+	fmt.Fprintln(conn, "INFO")
 
 	// Read one line of response
 	response, _ := bufio.NewReader(conn).ReadString('\n')

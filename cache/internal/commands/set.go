@@ -29,6 +29,6 @@ func Set(parts []string, cacheServer *cache.Cache, conn net.Conn) (string, bool)
 	key := parts[1]
 	value := parts[2]
 
-	cacheServer.Set(key, value, ttl)
-	return "OK", true
+	msg := cacheServer.Set(key, value, ttl)
+	return msg, true
 }

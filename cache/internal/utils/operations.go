@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"fmt"
 	"net"
 	"strings"
 
@@ -17,40 +16,21 @@ func PerformOperations(line string, cacheServer *cache.Cache, conn net.Conn) {
 	}
 
 	parts := strings.Fields(line)
-
 	command := strings.ToUpper(parts[0])
 
-	switch command {
-
-	case "SET":
-		msg, isvalid := commands.Set(parts, cacheServer, conn)
-		fmt.Println(msg)
-		conn.Write([]byte(msg+ "\n"))
-
-		if !isvalid {
-			return
-		}
-
-	case "GET":
-		msg, isvalid := commands.Get(parts, cacheServer, conn)
-		conn.Write([]byte(msg))
-
-		if !isvalid {
-			return
-		}
-
-	case "DELETE":
-		msg, isvalid := commands.Get(parts, cacheServer, conn)
-		conn.Write([]byte(msg))
-
-		if !isvalid {
-			return
-		}
-
-	case "PING":
-		conn.Write([]byte("PONG\n"))
-
-	default:
+	handler, exists := commands.Registry[command]
+	if !exists {
 		conn.Write([]byte("ERROR unknown command\n"))
+		return
+	}
+
+	response, ok := handler(parts, cacheServer, conn)
+
+	if response != "" {
+		conn.Write([]byte(response + "\n"))
+	}
+
+	if !ok {
+		return
 	}
 }

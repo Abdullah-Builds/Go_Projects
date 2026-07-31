@@ -1,34 +1,65 @@
 package main
 
-<<<<<<< HEAD
-import "fmt"
-
-func main() {
-	fmt.Println("cache server")
-=======
 import (
 	"log"
 	"net"
-	"time"
+	"os"
+	"os/signal"
+	"syscall"
 
+	"github.com/Abdullah-Builds/cache/config"
 	"github.com/Abdullah-Builds/cache/internal/cache"
 	"github.com/Abdullah-Builds/cache/internal/handler"
 )
 
 func main() {
 
-	var CacheServer = cache.New()
-	CacheServer.StartCleanup(time.Second)
+	// Load configuration
+	config := config.DefaultConfig()
 
-	listener, err := net.Listen("tcp", ":8080")
+	// Create data directory
+	if err := os.MkdirAll("data", 0755); err != nil {
+		log.Fatal(err)
+	}
 
+	// Create cache
+	cacheServer := cache.New()
+
+	// Load previous snapshot
+	if err := cacheServer.Load(config.DataFile); err != nil {
+		log.Println("load error:", err)
+	}
+
+	// Start background jobs
+	cacheServer.StartCleanup(config.CleanupInterval)
+	cacheServer.StartAutoSave(config.DataFile, config.AutoSaveInterval)
+
+	// Graceful shutdown
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-signals
+
+		log.Println("Saving cache before shutdown...")
+
+		if err := cacheServer.Save(config.DataFile); err != nil {
+			log.Println("save error:", err)
+		}
+
+		os.Exit(0)
+	}()
+
+	// Start TCP server
+	listener, err := net.Listen("tcp", ":"+config.Port)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer listener.Close()
 
-	log.Println("Cache server listening on :8080")
+	log.Printf("Cache server listening on :%s\n", config.Port)
 
+	// Accept connections
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -36,7 +67,6 @@ func main() {
 			continue
 		}
 
-		go handler.HandleConnection(conn, CacheServer)
+		go handler.HandleConnection(conn, cacheServer)
 	}
->>>>>>> 43439c3 (feat: cache version 1)
 }
