@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/Abdullah-Builds/cache/config"
@@ -15,15 +16,18 @@ import (
 func main() {
 
 	// Load configuration
-	config := config.DefaultConfig()
+	config, err := config.LoadConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Create data directory
-	if err := os.MkdirAll("data", 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(config.DataFile), 0755); err != nil {
 		log.Fatal(err)
 	}
 
 	// Create cache
-	cacheServer := cache.New()
+	cacheServer := cache.NewWithMaxKeys(config.MaxKeys)
 
 	// Load previous snapshot
 	if err := cacheServer.Load(config.DataFile); err != nil {

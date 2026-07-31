@@ -6,14 +6,13 @@ import (
 	"github.com/Abdullah-Builds/cache/internal/cache"
 )
 
-func Delete(parts []string, cacheServer *cache.Cache, conn net.Conn) (string,bool) {
+func Delete(parts []string, cacheServer *cache.Cache, conn net.Conn) (string, bool) {
 	if len(parts) != 2 {
-			conn.Write([]byte("ERROR usage: DELETE <key>\n"))
-			return "ERROR usage: DELETE <key>\n",false
-		}
+		return "ERROR usage: DELETE <key>", false
+	}
 
-		key := parts[1]
+	key := parts[1]
 
-		cacheServer.Delete(key)
-		return  "OK\n",true
+	cacheServer.Delete(key)
+	return "OK", true
 }

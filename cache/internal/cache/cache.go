@@ -24,23 +24,33 @@ type Cache struct {
 }
 
 func New() *Cache {
-	return &Cache{data: map[string]*list.Element{}, maxKeys: 100, stats: stats.Stats{}, lru: list.New()}
+	return NewWithMaxKeys(100)
+}
+
+func NewWithMaxKeys(maxKeys int) *Cache {
+	if maxKeys <= 0 {
+		maxKeys = 100
+	}
+	return &Cache{data: map[string]*list.Element{}, maxKeys: maxKeys, stats: stats.Stats{}, lru: list.New()}
 }
 
 func (c *Cache) Set(key, value string, ttl time.Duration) string {
-
-	c.stats.Requests.Add(1)
-
-	if len(c.data) >= c.maxKeys {
-		oldest := c.lru.Back()
-		entry := oldest.Value.(*Entry)
-
-		delete(c.data, entry.Key)
-		c.lru.Remove(oldest)
-	}
-
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.stats.Requests.Add(1)
+
+	if existing, ok := c.data[key]; ok {
+		entry := existing.Value.(*Entry)
+		c.usedMemory -= int64(len(entry.Key) + len(entry.Item.Value))
+		c.lru.Remove(existing)
+		delete(c.data, key)
+	} else if len(c.data) >= c.maxKeys {
+		oldest := c.lru.Back()
+		entry := oldest.Value.(*Entry)
+		delete(c.data, entry.Key)
+		c.usedMemory -= int64(len(entry.Key) + len(entry.Item.Value))
+		c.lru.Remove(oldest)
+	}
 
 	entry := &Entry{
 		Key: key,
@@ -61,24 +71,33 @@ func (c *Cache) Set(key, value string, ttl time.Duration) string {
 	element := c.lru.PushFront(entry)
 	c.data[key] = element
 
-	return "OK\n"
+	return "OK"
 }
 
 func (c *Cache) Get(key string) (string, bool) {
 
 	c.stats.Requests.Add(1)
 
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	element, ok := c.data[key]
 	if !ok {
 		c.stats.Misses.Add(1)
 		return "", false
 	}
+	entry := element.Value.(*Entry)
+	if !entry.Item.ExpiresAt.IsZero() && !time.Now().Before(entry.Item.ExpiresAt) {
+		c.lru.Remove(element)
+		delete(c.data, key)
+		c.usedMemory -= int64(len(key) + len(entry.Item.Value))
+		c.stats.Misses.Add(1)
+		c.stats.Deletes.Add(1)
+		return "", false
+	}
 	c.lru.MoveToFront(element)
 	c.stats.Hits.Add(1)
-	return (element.Value.(*Entry).Item.Value), true
+	return entry.Item.Value, true
 }
 
 func (c *Cache) Delete(key string) {
@@ -86,7 +105,10 @@ func (c *Cache) Delete(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	element := c.data[key]
+	element, ok := c.data[key]
+	if !ok {
+		return
+	}
 	c.lru.Remove(element)
 	c.usedMemory -= int64(len(key) + len(element.Value.(*Entry).Item.Value))
 

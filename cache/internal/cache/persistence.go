@@ -18,6 +18,8 @@ func (c *Cache) Save(filename string) error {
 			continue
 		}
 		switch v := elem.Value.(type) {
+		case *Entry:
+			snapshotData[k] = v.Item
 		case Item:
 			snapshotData[k] = v
 		case *Item:
@@ -55,14 +57,22 @@ func (c *Cache) Load(filename string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// rebuild internal map from snapshot Data (map[string]Item) to map[string]*list.Element
+	// Rebuild both the map and LRU list from the snapshot.
 	newData := make(map[string]*list.Element, len(snapshot.Data))
+	newLRU := list.New()
 	for k, it := range snapshot.Data {
-		item := it
-		newData[k] = &list.Element{Value: item}
+		if !it.ExpiresAt.IsZero() && !time.Now().Before(it.ExpiresAt) {
+			continue
+		}
+		newData[k] = newLRU.PushFront(&Entry{Key: k, Item: it})
 	}
 
 	c.data = newData
+	c.lru = newLRU
+	c.usedMemory = 0
+	for key, elem := range c.data {
+		c.usedMemory += int64(len(key) + len(elem.Value.(*Entry).Item.Value))
+	}
 	return nil
 }
 
